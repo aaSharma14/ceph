@@ -10,8 +10,9 @@ import { FormLoadingDirective } from './form-loading.directive';
 import { IopsDirective } from './iops.directive';
 import { MillisecondsDirective } from './milliseconds.directive';
 import { PasswordButtonDirective } from './password-button.directive';
+import { PermissionScopeDirective } from './permission-scope.directive';
 import { TrimDirective } from './trim.directive';
-
+import { UpdateScopeDirective } from './update-scope.directive';
 @NgModule({
   imports: [],
   declarations: [
@@ -23,7 +24,9 @@ import { TrimDirective } from './trim.directive';
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
-    FormLoadingDirective
+    FormLoadingDirective,
+    PermissionScopeDirective,
+    UpdateScopeDirective
   ],
   exports: [
     AutofocusDirective,
@@ -34,7 +37,11 @@ import { TrimDirective } from './trim.directive';
     TrimDirective,
     MillisecondsDirective,
     IopsDirective,
-    FormLoadingDirective
+    FormLoadingDirective,
+    IopsDirective,
+    FormLoadingDirective,
+    PermissionScopeDirective,
+    UpdateScopeDirective
   ],
   providers: [],
   entryComponents: [LoadingPanelComponent, AlertPanelComponent]
