@@ -77,7 +77,7 @@ class AuthTest(DashboardTestCase):
         data = self.jsonBody()
         self._validate_jwt_token(data['token'], "admin", data['permissions'])
         self.set_jwt_token(data['token'])
-        self._post("/api/auth/logout")
+        self._post("/api/auth/logout", extra_headers={'content-type': 'application/json'})
         self.assertStatus(200)
         self.assertJsonBody({
             "redirect_url": "#/login"

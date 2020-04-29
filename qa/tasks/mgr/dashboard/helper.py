@@ -191,12 +191,13 @@ class DashboardTestCase(MgrTestCase):
 
     # pylint: disable=inconsistent-return-statements
     @classmethod
-    def _request(cls, url, method, data=None, params=None):
+    def _request(cls, url, method, data=None, params=None, extra_headers):
         url = "{}{}".format(cls._base_uri, url)
         log.info("Request %s to %s", method, url)
         headers = {}
         if cls._token:
             headers['Authorization'] = "Bearer {}".format(cls._token)
+        headers.update(extra_headers)
 
         if method == 'GET':
             cls._resp = cls._session.get(url, params=params, verify=False,
