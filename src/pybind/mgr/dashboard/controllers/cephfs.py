@@ -74,7 +74,7 @@ class CephFS(RESTController):
                 "mds_mem.ino"
             ]
 
-        result = {}  # type: dict
+        result: dict = {}
         mds_names = self._get_mds_names(fs_id)
 
         for mds_name in mds_names:
@@ -129,7 +129,7 @@ class CephFS(RESTController):
 
     # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
-        mds_versions = defaultdict(list)  # type: dict
+        mds_versions: dict = defaultdict(list)
 
         fsmap = mgr.get("fs_map")
         filesystem = None
@@ -384,7 +384,7 @@ class CephFS(RESTController):
             path = os.path.normpath(path)
         return path
 
-    @RESTController.Resource('POST')
+    @RESTController.Resource('POST', path='/{dir_path}')
     def mk_dirs(self, fs_id, path):
         """
         Create a directory.
@@ -394,7 +394,7 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         cfs.mk_dirs(path)
 
-    @RESTController.Resource('POST')
+    @RESTController.Resource('DELETE', path='/{dir_path}')
     def rm_dir(self, fs_id, path):
         """
         Remove a directory.
@@ -404,7 +404,7 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         cfs.rm_dir(path)
 
-    @RESTController.Resource('POST')
+    @RESTController.Resource('POST', path='/{snapshot_dir}')
     def mk_snapshot(self, fs_id, path, name=None):
         """
         Create a snapshot.
@@ -419,7 +419,7 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         return cfs.mk_snapshot(path, name)
 
-    @RESTController.Resource('POST')
+    @RESTController.Resource('DELETE', path='/{snapshot_dir}')
     def rm_snapshot(self, fs_id, path, name):
         """
         Remove a snapshot.
@@ -443,7 +443,7 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         return cfs.get_quotas(path)
 
-    @RESTController.Resource('POST')
+    @RESTController.Resource('PUT')
     def set_quotas(self, fs_id, path, max_bytes=None, max_files=None):
         """
         Set the quotas of the specified path.
