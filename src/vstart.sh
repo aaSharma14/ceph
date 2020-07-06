@@ -175,7 +175,6 @@ fi
 filestore_path=
 kstore_path=
 bluestore_dev=
-ganesha_path=/usr/bin/ganesha.nfsd
 
 VSTART_SEC="client.vstart.sh"
 
@@ -234,7 +233,6 @@ usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
-usage=$usage"\t--ganesha-path: path to ganesha.nfsd binary (defaults to $ganesha_path)\n"
 
 usage_exit() {
     printf "$usage"
@@ -445,10 +443,6 @@ case $1 in
         ;;
     --bluestore-zoned )
         zoned_enabled=1
-        ;;
-    --ganesha-path)
-        ganesha_path="$2"
-        shift
         ;;
     * )
         usage_exit
@@ -1151,7 +1145,7 @@ EOF
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun env CEPH_CONF="${conf_fn}" $ganesha_path -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
@@ -1168,7 +1162,6 @@ EOF
     if $with_mgr_dashboard; then
         ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace $pool_name
     fi
-    echo "Mount using: mount -t nfs -o port=<ganesha-port-num> <address>:<ganesha pseudo path>"
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -1377,14 +1370,17 @@ fi
 
 # Ganesha Daemons
 if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+    pseudo_path="/cephfs"
     if [ "$cephadm" -gt 0 ]; then
         cluster_id="vstart"
         prun ceph_adm nfs cluster create cephfs $cluster_id
-        prun ceph_adm nfs export create cephfs "a" $cluster_id "/cephfs"
-        echo "Mount using: mount -t nfs -o port=2049 <address>:/cephfs"
+        prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
+        port="2049"
     else
         start_ganesha
+        port="<ganesha-port-num>"
     fi
+    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
 fi
 
 do_cache() {

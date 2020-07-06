@@ -21,6 +21,7 @@ class TestVolumes(CephFSTestCase):
 
     # for filling subvolume with data
     CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 2
 
     # io defaults
     DEFAULT_FILE_SIZE = 1 # MB
@@ -28,6 +29,9 @@ class TestVolumes(CephFSTestCase):
 
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
+
+    def _raw_cmd(self, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
 
     def __check_clone_state(self, state, clone, clone_group=None, timo=120):
         check = 0
@@ -200,13 +204,11 @@ class TestVolumes(CephFSTestCase):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
 
         reg_file = "regfile.0"
-        reg_path = os.path.join(subvolpath, reg_file)
         dir_path = os.path.join(subvolpath, "dir.0")
         sym_path1 = os.path.join(subvolpath, "sym.0")
         # this symlink's ownership would be changed
         sym_path2 = os.path.join(dir_path, "sym.0")
 
-        #self.mount_a.write_n_mb(reg_path, TestVolumes.DEFAULT_FILE_SIZE)
         self.mount_a.run_shell(["sudo", "mkdir", dir_path], omit_sudo=False)
         self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path1], omit_sudo=False)
         self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path2], omit_sudo=False)
@@ -309,6 +311,27 @@ class TestVolumes(CephFSTestCase):
                                        "The volume {0} not removed.".format(self.volname))
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
+
+    def test_volume_rm_arbitrary_pool_removal(self):
+        """
+        That the arbitrary pool added to the volume out of band is removed
+        successfully on volume removal.
+        """
+        new_pool = "new_pool"
+        # add arbitrary data pool
+        self.fs.add_data_pool(new_pool)
+        vol_status = json.loads(self._fs_cmd("status", self.volname, "--format=json-pretty"))
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if fs is gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        volnames = [volume['name'] for volume in volumes]
+        self.assertNotIn(self.volname, volnames)
+
+        #check if osd pools are gone
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
+        for pool in vol_status["pools"]:
+            self.assertNotIn(pool["name"], pools)
 
     ### basic subvolume operations
 
@@ -591,6 +614,44 @@ class TestVolumes(CephFSTestCase):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_subvolume_pin_export(self):
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "pin", self.volname, subvolume, "export", "1")
+        path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
+        path = os.path.dirname(path) # get subvolume path
+
+        self._get_subtrees(status=status, rank=1)
+        self._wait_subtrees([(path, 1)], status=status)
+
+    def test_subvolumegroup_pin_distributed(self):
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        self.config_set('mds', 'mds_export_ephemeral_distributed', True)
+
+        group = "pinme"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd("subvolumegroup", "pin", self.volname, group, "distributed", "True")
+        # (no effect on distribution) pin the group directory to 0 so rank 0 has all subtree bounds visible
+        self._fs_cmd("subvolumegroup", "pin", self.volname, group, "export", "0")
+        for i in range(10):
+            subvolume = self._generate_random_subvolume_name()
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        self._wait_distributed_subtrees(10, status=status)
+
+    def test_subvolume_pin_random(self):
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.config_set('mds', 'mds_export_ephemeral_random', True)
+
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "pin", self.volname, subvolume, "random", ".01")
+        # no verification
 
     def test_subvolume_create_isolated_namespace(self):
         """

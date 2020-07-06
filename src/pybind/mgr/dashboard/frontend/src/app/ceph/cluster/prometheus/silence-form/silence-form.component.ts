@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
+import * as moment from 'moment';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import {
@@ -24,6 +24,7 @@ import {
 import { Permission } from '../../../../shared/models/permissions';
 import { AlertmanagerAlert, PrometheusRule } from '../../../../shared/models/prometheus-alerts';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '../../../../shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '../../../../shared/services/time-diff.service';
@@ -39,9 +40,6 @@ export class SilenceFormComponent {
   permission: Permission;
   form: CdFormGroup;
   rules: PrometheusRule[];
-
-  // Date formatting rules can be found here: https://momentjs.com/docs/#/displaying/format/
-  bsConfig = { dateInputFormat: 'YYYY-MM-DDT HH:mm' };
 
   recreate = false;
   edit = false;
@@ -70,6 +68,8 @@ export class SilenceFormComponent {
     }
   ];
 
+  datetimeFormat = 'YYYY-MM-DD HH:mm';
+
   constructor(
     private i18n: I18n,
     private router: Router,
@@ -79,7 +79,7 @@ export class SilenceFormComponent {
     private notificationService: NotificationService,
     private route: ActivatedRoute,
     private timeDiff: TimeDiffService,
-    private bsModalService: BsModalService,
+    private modalService: ModalService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
@@ -96,8 +96,8 @@ export class SilenceFormComponent {
   }
 
   private chooseMode() {
-    this.edit = this.router.url.startsWith('/monitoring/silence/edit');
-    this.recreate = this.router.url.startsWith('/monitoring/silence/recreate');
+    this.edit = this.router.url.startsWith('/monitoring/silences/edit');
+    this.recreate = this.router.url.startsWith('/monitoring/silences/recreate');
     if (this.edit) {
       this.action = this.actionLabels.EDIT;
     } else if (this.recreate) {
@@ -117,11 +117,15 @@ export class SilenceFormComponent {
   }
 
   private createForm() {
+    const formatValidator = CdValidators.custom('format', (expiresAt: string) => {
+      const result = expiresAt === '' || moment(expiresAt, this.datetimeFormat).isValid();
+      return !result;
+    });
     this.form = this.formBuilder.group(
       {
-        startsAt: [null, [Validators.required]],
+        startsAt: ['', [Validators.required, formatValidator]],
         duration: ['2h', [Validators.min(1)]],
-        endsAt: [null, [Validators.required]],
+        endsAt: ['', [Validators.required, formatValidator]],
         createdBy: [this.authStorageService.getUsername(), [Validators.required]],
         comment: [null, [Validators.required]]
       },
@@ -132,21 +136,18 @@ export class SilenceFormComponent {
   }
 
   private setupDates() {
-    const now = new Date();
-    now.setSeconds(0, 0); // Normalizes start date
+    const now = moment().format(this.datetimeFormat);
     this.form.silentSet('startsAt', now);
     this.updateDate();
     this.subscribeDateChanges();
   }
 
   private updateDate(updateStartDate?: boolean) {
-    const next = this.timeDiff.calculateDate(
-      this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt'),
-      this.form.getValue('duration'),
-      updateStartDate
-    );
+    const date = moment(this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt')).toDate();
+    const next = this.timeDiff.calculateDate(date, this.form.getValue('duration'), updateStartDate);
     if (next) {
-      this.form.silentSet(updateStartDate ? 'startsAt' : 'endsAt', next);
+      const nextDate = moment(next).format(this.datetimeFormat);
+      this.form.silentSet(updateStartDate ? 'startsAt' : 'endsAt', nextDate);
     }
   }
 
@@ -163,7 +164,9 @@ export class SilenceFormComponent {
   }
 
   private onDateChange(updateStartDate?: boolean) {
-    if (this.form.getValue('startsAt') < this.form.getValue('endsAt')) {
+    const startsAt = moment(this.form.getValue('startsAt'));
+    const endsAt = moment(this.form.getValue('endsAt'));
+    if (startsAt.isBefore(endsAt)) {
       this.updateDuration();
     } else {
       this.updateDate(updateStartDate);
@@ -171,10 +174,9 @@ export class SilenceFormComponent {
   }
 
   private updateDuration() {
-    this.form.silentSet(
-      'duration',
-      this.timeDiff.calculateDuration(this.form.getValue('startsAt'), this.form.getValue('endsAt'))
-    );
+    const startsAt = moment(this.form.getValue('startsAt')).toDate();
+    const endsAt = moment(this.form.getValue('endsAt')).toDate();
+    this.form.silentSet('duration', this.timeDiff.calculateDuration(startsAt, endsAt));
   }
 
   private getData() {
@@ -232,7 +234,9 @@ export class SilenceFormComponent {
   private fillFormWithSilence(silence: AlertmanagerSilence) {
     this.id = silence.id;
     if (this.edit) {
-      ['startsAt', 'endsAt'].forEach((attr) => this.form.silentSet(attr, new Date(silence[attr])));
+      ['startsAt', 'endsAt'].forEach((attr) =>
+        this.form.silentSet(attr, moment(silence[attr]).format(this.datetimeFormat))
+      );
       this.updateDuration();
     }
     ['createdBy', 'comment'].forEach((attr) => this.form.silentSet(attr, silence[attr]));
@@ -271,14 +275,14 @@ export class SilenceFormComponent {
   }
 
   showMatcherModal(index?: number) {
-    const modalRef = this.bsModalService.show(SilenceMatcherModalComponent);
-    const modal = modalRef.content as SilenceMatcherModalComponent;
-    modal.rules = this.rules;
+    const modalRef = this.modalService.show(SilenceMatcherModalComponent);
+    const modalComponent = modalRef.componentInstance as SilenceMatcherModalComponent;
+    modalComponent.rules = this.rules;
     if (_.isNumber(index)) {
-      modal.editMode = true;
-      modal.preFillControls(this.matchers[index]);
+      modalComponent.editMode = true;
+      modalComponent.preFillControls(this.matchers[index]);
     }
-    modalRef.content.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
+    modalComponent.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
       this.setMatcher(matcher, index);
     });
   }
@@ -294,7 +298,7 @@ export class SilenceFormComponent {
     }
     this.prometheusService.setSilence(this.getSubmitData()).subscribe(
       (resp) => {
-        this.router.navigate(['/monitoring'], { fragment: 'silences' });
+        this.router.navigate(['/monitoring/silences']);
         this.notificationService.show(
           NotificationType.success,
           this.getNotificationTile(resp.body['silenceId']),
@@ -310,8 +314,8 @@ export class SilenceFormComponent {
   private getSubmitData(): AlertmanagerSilence {
     const payload = this.form.value;
     delete payload.duration;
-    payload.startsAt = payload.startsAt.toISOString();
-    payload.endsAt = payload.endsAt.toISOString();
+    payload.startsAt = moment(payload.startsAt, this.datetimeFormat).toISOString();
+    payload.endsAt = moment(payload.endsAt, this.datetimeFormat).toISOString();
     payload.matchers = this.matchers;
     if (this.edit) {
       payload.id = this.id;
