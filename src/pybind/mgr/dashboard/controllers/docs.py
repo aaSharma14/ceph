@@ -8,8 +8,6 @@ import cherrypy
 from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import mgr
 
-from ..tools import str_to_bool
-
 
 logger = logging.getLogger('controllers.docs')
 
@@ -313,23 +311,20 @@ class Docs(BaseController):
 
         return paths
 
-    def _gen_spec(self, all_endpoints=False, base_url=""):
+    @classmethod
+    def _gen_spec(cls, all_endpoints=False, base_url="", offline=False):
         if all_endpoints:
             base_url = ""
 
-        host = cherrypy.request.base
-        host = host[host.index(':')+3:]
+        host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
         logger.debug("Host: %s", host)
 
-        paths = self._gen_paths(all_endpoints)
+        paths = cls._gen_paths(all_endpoints)
 
         if not base_url:
             base_url = "/"
 
-        scheme = 'https'
-        ssl = str_to_bool(mgr.get_localized_module_option('ssl', True))
-        if not ssl:
-            scheme = 'http'
+        scheme = 'https' if offline or mgr.get_localized_module_option('ssl') else 'http'
 
         spec = {
             'openapi': "3.0.0",
@@ -345,8 +340,10 @@ class Docs(BaseController):
             },
             'host': host,
             'basePath': base_url,
-            'servers': [{'url': "{}{}".format(cherrypy.request.base, base_url)}],
-            'tags': self._gen_tags(all_endpoints),
+            'servers': [{'url': "{}{}".format(
+                cherrypy.request.base if not offline else '',
+                base_url)}],
+            'tags': cls._gen_tags(all_endpoints),
             'schemes': [scheme],
             'paths': paths,
             'components': {
@@ -451,3 +448,18 @@ class Docs(BaseController):
               query_params="{all_endpoints}")
     def _with_token(self, token, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints, token)
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    import json
+    from . import generate_routes
+
+    mgr.get_frontend_path.side_effect = lambda: os.path.abspath('./dashboard/frontend/dist')
+    generate_routes("/api")
+    with open(sys.argv[1], 'x') as f:
+        # pylint: disable=protected-access
+        json.dump(
+            Docs._gen_spec(all_endpoints=False, base_url="/", offline=True),
+            fp=f)

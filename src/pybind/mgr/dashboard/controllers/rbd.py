@@ -319,7 +319,10 @@ class RbdSnapshot(RESTController):
 @ApiController('/block/image/trash', Scope.RBD_IMAGE)
 class RbdTrash(RESTController):
     RESOURCE_ID = "image_id_spec"
-    rbd_inst = rbd.RBD()
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
 
     @ViewCache()
     def _trash_pool_list(self, pool_name):
@@ -399,7 +402,10 @@ class RbdTrash(RESTController):
 
 @ApiController('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
 class RbdNamespace(RESTController):
-    rbd_inst = rbd.RBD()
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
 
     def create(self, pool_name, namespace):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
