@@ -1,0 +1,28 @@
+<ng-container>
+    <ng-container>
+      <div class="cd-context-bar pt-3 pb-3">
+        <span class="me-1 hello"
+              i18n>Selected Remote Cluster:</span>
+        <div ngbDropdown
+             placement="bottom-left"
+             class="d-inline-block ms-2">
+          <button ngbDropdownToggle
+                  class="btn btn-outline-info ctx-bar-selected-rgw-daemon"
+                  i18n-title
+                  title="Selected Remote Cluster:">
+            {{ clusters[0].remoteClusterUrl }}
+          </button>
+          <div ngbDropdownMenu>
+            <ng-container *ngFor="let cluster of clusters">
+              <button ngbDropdownItem
+                      class="ctx-bar-available-rgw-daemon"
+                      (click)="onClusterSelection(cluster)">
+                {{ cluster.remoteClusterUrl }}
+              </button>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+</ng-container>
+  

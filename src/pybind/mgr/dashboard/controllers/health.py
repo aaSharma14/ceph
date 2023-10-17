@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import json
-
+import ast
+import logging
 from .. import mgr
+import requests
+import cherrypy
 from ..rest_client import RequestException
+from ..settings import Settings
 from ..security import Permission, Scope
 from ..services.ceph_service import CephService
 from ..services.cluster import ClusterModel
@@ -12,6 +16,10 @@ from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 from .host import get_hosts
+from . import RESTController, allow_empty_body
+
+logger = logging.getLogger("controllers.rgw")
+
 
 HEALTH_MINIMAL_SCHEMA = ({
     'client_perf': ({
@@ -277,7 +285,7 @@ class HealthData(object):
 
 @APIRouter('/health')
 @APIDoc("Display Detailed Cluster health Status", "Health")
-class Health(BaseController):
+class Health(RESTController):
     def __init__(self):
         super().__init__()
         self.health_full = HealthData(self._has_permissions, minimal=False)
@@ -296,6 +304,41 @@ class Health(BaseController):
     @Endpoint()
     def get_cluster_capacity(self):
         return ClusterModel.get_capacity()
+
+    @Endpoint('POST')
+    def add_remote_cluster(self, apiToken, remoteClusterUrl):
+        remote_cluster_urls = Settings.REMOTE_CLUSTER_URLS
+        if len(remote_cluster_urls) == 0:
+            logger.info('helloji %s', remote_cluster_urls)
+            remote_cluster_urls.append({'apiToken': apiToken, 'remoteClusterUrl': remoteClusterUrl})
+            Settings.REMOTE_CLUSTER_URLS = remote_cluster_urls
+            logger.info('hellojiw %s', remote_cluster_urls)
+
+    @Endpoint()
+    def get_remote_cluster_urls(self):
+        remote_cluster_urls = Settings.REMOTE_CLUSTER_URLS
+        logger.info('hellojipoooo %s', remote_cluster_urls)
+        return remote_cluster_urls
+    
+    @RESTController.Collection(method='GET', path='/get_remote_cluster_capacity')
+    @allow_empty_body
+    def get_remote_cluster_capacity(self, remote_cluster_url=None, apiToken=None):
+        response = {}
+        try:
+            from requests.auth import HTTPBasicAuth
+            headers = {
+                'Accept': 'application/vnd.ceph.api.v1.0+json',
+                'Authorization': 'Bearer ' + apiToken,
+            }
+            base_url = remote_cluster_url
+            path = '/api/health/get_cluster_capacity'
+            response = requests.request('GET', base_url + path, headers=headers, verify=False)
+            logger.info('oyeejii %s', response.status_code)
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            logger.exception('hellojjiii %s',e)
+
 
     @Endpoint()
     def get_cluster_fsid(self):
