@@ -160,7 +160,10 @@ export class UsersPageHelper extends PageHelper {
     this.getExpandCollapseElement(user_name).should('be.visible').click();
     cy.get('cd-table').contains('td', user_name).click();
     cy.get('cd-rgw-user-details cd-table').eq(0).first().click();
-    cy.get("[aria-label='Show']").should('exist').click();
+    cy.get("[aria-label='Show']", { timeout: 10000 })
+    .should('be.visible')
+    .scrollIntoView()
+    .click();
     cy.get('input#user').should('exist');
     cy.get('input#access_key').should('exist');
     cy.get('input#secret_key').should('exist');

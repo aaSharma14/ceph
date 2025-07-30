@@ -297,6 +297,7 @@
         <cds-checkbox name="encryption_enabled"
                       formControlName="encryption_enabled"
                       id="encryption_enabled"
+                      data-testid="encryption-checkbox"
                       [disabled]="!kmsConfigured && !s3Configured"
                       i18n>Enable
           <cd-help-text aria-label="encryption helper">
